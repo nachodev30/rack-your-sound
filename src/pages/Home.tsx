@@ -1,5 +1,5 @@
 import { useNavigate } from "react-router"
-import { FolderOpen, Plus, Settings, User } from "lucide-react"
+import { FolderOpen, Plus, ClipboardList, Settings, User } from "lucide-react"
 import ActionCard from "../components/ActionCard"
 import RecentProjectItem from "../components/RecentProjectItem"
 import type { Project } from "../types/project"
@@ -35,6 +35,11 @@ function Home() {
                         onClick={() => {
                             // Cargar proyecto guardado
                         }}
+                    />
+                     <ActionCard 
+                        icon={ClipboardList}
+                        label= "Catálogo de Componentes"
+                        onClick={() => window.open('https://rackyoursound.agusdoblea.es/ListadoComponentesIndividuales.html')}
                     />
                 </div>
 
