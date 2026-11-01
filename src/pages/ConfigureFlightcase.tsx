@@ -1,27 +1,39 @@
 import { useState } from 'react'
-import {
-    Circle,
-    CircleDot,
-    Disc,
-    DoorClosed,
-    Grip,
-    Lock,
-    PanelBottom,
-    Plus,
-    Rows3,
-} from 'lucide-react'
-import CounterField from '../components/CounterField'
-import SizeOptionCard from '../components/SizeOptionCard'
-import ToggleField from '../components/ToggleField'
-import WizardHeader from '../components/WizardHeader'
+import { Plus } from 'lucide-react'
+import ComponentRow from '../components/ComponentRow'
 import FlightcasePreview3D from '../components/FlightcasePreview3D'
-import { FLIGHTCASE_SIZE } from '../data/flightcaseSizes'
+import SizeOptionCard from '../components/SizeOptionCard'
+import WizardHeader from '../components/WizardHeader'
+import { FLIGHTCASE_SIZES } from '../data/flightcaseSizes'
 import { useProjectStore } from '../store/projectStore'
+import {
+    getAllFamilies,
+    getCatalogItem,
+    getFamilyColors,
+    getFamilyItems,
+    getFamilyLabel,
+} from '../utils/catalog'
 import { calculateFlightcaseWeight } from '../utils/flightcaseCalculations'
 import { toDisplayValue, toMillimeters } from '../utils/units'
 
+// Por debajo de 1280 px se ve un panel cada vez, elegido con estas pestañas.
+const TABS = [
+    { id: 'size', label: 'Tamaño' },
+    { id: 'customize', label: 'Personalizar' },
+    { id: 'preview', label: 'Vista 3D' },
+] as const
+
+type Tab = (typeof TABS)[number]['id']
+
+const DIMENSION_FIELDS = [
+    { key: 'width', label: 'Anchura (W)' },
+    { key: 'height', label: 'Altura (H)' },
+    { key: 'depth', label: 'Profundidad (D)' },
+] as const
+
 function ConfigureFlightcase() {
     const [unit, setUnit] = useState<'mm' | 'in'>('mm')
+    const [activeTab, setActiveTab] = useState<Tab>('size')
 
     const flightcaseSizeId = useProjectStore((state) => state.flightcaseSizeId)
     const selectStandardSize = useProjectStore((state) => state.selectStandardSize)
@@ -30,16 +42,24 @@ function ConfigureFlightcase() {
     const setDimensions = useProjectStore((state) => state.setDimensions)
     const rackUnits = useProjectStore((state) => state.rackUnits)
     const setRackUnits = useProjectStore((state) => state.setRackUnits)
-    const rackStripType = useProjectStore((state) => state.rackStripType)
-    const setRackStripType = useProjectStore((state) => state.setRackStripType)
     const components = useProjectStore((state) => state.components)
-    const setComponentCount = useProjectStore((state) => state.setComponentCount)
-    const setComponentFlag = useProjectStore((state) => state.setComponentFlag)
+    const setComponentQuantity = useProjectStore((state) => state.setComponentQuantity)
+    const setComponentColor = useProjectStore((state) => state.setComponentColor)
 
-    const estimatedWeight = calculateFlightcaseWeight(dimensions, components)
+    const estimatedWeight = calculateFlightcaseWeight(dimensions, components, rackUnits)
+
+    const summaryItems = [
+        { label: 'Unidades de rack', shortLabel: 'Rack', value: `${rackUnits}U` },
+        {
+            label: 'Dimensiones (W x H x D)',
+            shortLabel: 'W x H x D',
+            value: `${dimensions.width} x ${dimensions.height} x ${dimensions.depth} mm`,
+        },
+        { label: 'Peso aprox.', shortLabel: 'Peso aprox.', value: `${estimatedWeight.toFixed(1)} kg` },
+    ]
 
     return (
-        <div className="min-h-screen bg-neutral-950 text-white">
+        <div className="flex h-dvh flex-col overflow-hidden bg-neutral-950 text-white">
             <WizardHeader
                 currentStep={2}
                 continueDisabled={!flightcaseSizeId}
@@ -48,17 +68,38 @@ function ConfigureFlightcase() {
                 }}
             />
 
-            <div className="grid grid-cols-[280px_1fr_320px] gap-6 px-6 py-8">
-                <section>
-                    <h2 className="text-lg font-semibold uppercase tracking-wide text-white">
+            <div role="tablist" className="flex shrink-0 border-b border-neutral-800 xl:hidden">
+                {TABS.map((tab) => (
+                    <button
+                        key={tab.id}
+                        type="button"
+                        role="tab"
+                        aria-selected={activeTab === tab.id}
+                        onClick={() => setActiveTab(tab.id)}
+                        className={`flex-1 border-b-2 py-3 text-sm font-medium transition-colors ${activeTab === tab.id
+                                ? 'border-violet-500 text-white'
+                                : 'border-transparent text-neutral-500'
+                            }`}
+                    >
+                        {tab.label}
+                    </button>
+                ))}
+            </div>
+
+            <div className="grid min-h-0 flex-1 grid-cols-1 grid-rows-[minmax(0,1fr)] gap-6 px-4 py-4 xl:grid-cols-[minmax(200px,240px)_minmax(0,1fr)_minmax(260px,320px)] xl:px-6 xl:py-5">
+                {/* Panel 1: elegir tamaño */}
+                <section
+                    className={`${activeTab === 'size' ? 'block' : 'hidden xl:block'} min-h-0 overflow-y-auto`}
+                >
+                    <h2 className="text-base font-semibold uppercase tracking-wide text-white xl:text-lg">
                         Elige tu flightcase
                     </h2>
                     <p className="mt-1 text-sm text-neutral-500">
                         Selecciona uno de nuestros modelos más utilizados.
                     </p>
 
-                    <div className="mt-4 flex flex-col gap-3">
-                        {FLIGHTCASE_SIZE.map((size) => (
+                    <div className="mt-3 grid grid-cols-2 gap-2 md:grid-cols-3 lg:grid-cols-5 xl:flex xl:flex-col xl:gap-3">
+                        {FLIGHTCASE_SIZES.map((size) => (
                             <SizeOptionCard
                                 key={size.id}
                                 size={size}
@@ -67,7 +108,7 @@ function ConfigureFlightcase() {
                             />
                         ))}
 
-                        <label className="block cursor-pointer">
+                        <label className="col-span-2 flex cursor-pointer md:col-span-1">
                             <input
                                 type="radio"
                                 name="flightcase-size"
@@ -75,7 +116,7 @@ function ConfigureFlightcase() {
                                 onChange={() => selectCustomSize()}
                                 className="peer sr-only"
                             />
-                            <div className="flex flex-col items-center gap-1 rounded-lg border-2 border-dashed border-violet-500/60 px-4 py-6 text-center text-violet-400 transition-colors peer-checked:border-violet-400 peer-checked:bg-violet-500/5">
+                            <div className="flex w-full flex-col items-center justify-center gap-1 rounded-lg border-2 border-dashed border-violet-500/60 px-4 py-4 text-center text-violet-400 transition-colors peer-checked:border-violet-400 peer-checked:bg-violet-500/5">
                                 <Plus className="h-5 w-5" />
                                 <span className="font-semibold">Personalizado</span>
                                 <span className="text-xs text-neutral-500">Diseña tu flightcase a medida.</span>
@@ -84,16 +125,19 @@ function ConfigureFlightcase() {
                     </div>
                 </section>
 
-                <section className="flex flex-col gap-6">
+                {/* Panel 2: personalizar */}
+                <section
+                    className={`${activeTab === 'customize' ? 'flex' : 'hidden xl:flex'} min-h-0 flex-col gap-4 overflow-y-auto`}
+                >
                     <div>
-                        <h2 className="text-lg font-semibold uppercase tracking-wide text-white">
+                        <h2 className="text-base font-semibold uppercase tracking-wide text-white xl:text-lg">
                             Personaliza tu flightcase
                         </h2>
                         <p className="mt-1 text-sm text-neutral-500">Define cada detalle de tu flightcase.</p>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-8">
-                        <div className="flex flex-col gap-6">
+                    <div className="grid grid-cols-1 gap-6 md:grid-cols-[minmax(0,2fr)_minmax(0,3fr)] md:gap-8">
+                        <div className="flex flex-col gap-5">
                             <div>
                                 <div className="flex items-center justify-between">
                                     <h3 className="text-xs font-semibold uppercase tracking-wider text-neutral-500">
@@ -119,57 +163,31 @@ function ConfigureFlightcase() {
                                     </div>
                                 </div>
 
-                                <div className="mt-4 flex flex-col gap-4">
-                                    <div>
-                                        <label className="text-sm text-neutral-400">Anchura (W)</label>
-                                        <div className="relative mt-1">
-                                            <input
-                                                type="number"
-                                                value={toDisplayValue(dimensions.width, unit)}
-                                                onChange={(e) =>
-                                                    setDimensions({ width: toMillimeters(Number(e.target.value), unit) })
-                                                }
-                                                className="w-full rounded-lg border border-neutral-800 bg-neutral-900 px-3 py-2 pr-10 text-white focus:border-violet-500 focus:outline-none"
-                                            />
-                                            <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-sm text-neutral-500">
-                                                {unit}
-                                            </span>
+                                <div className="mt-3 grid grid-cols-3 gap-2 md:grid-cols-1 md:gap-3">
+                                    {DIMENSION_FIELDS.map(({ key, label }) => (
+                                        <div key={key}>
+                                            <label
+                                                htmlFor={`dimension-${key}`}
+                                                className="text-xs text-neutral-400 md:text-sm"
+                                            >
+                                                {label}
+                                            </label>
+                                            <div className="relative mt-1">
+                                                <input
+                                                    id={`dimension-${key}`}
+                                                    type="number"
+                                                    value={toDisplayValue(dimensions[key], unit)}
+                                                    onChange={(e) =>
+                                                        setDimensions({ [key]: toMillimeters(Number(e.target.value), unit) })
+                                                    }
+                                                    className="w-full rounded-lg border border-neutral-800 bg-neutral-900 px-2 py-2 pr-9 text-base text-white focus:border-violet-500 focus:outline-none md:px-3 md:pr-10"
+                                                />
+                                                <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-xs text-neutral-500 md:right-3 md:text-sm">
+                                                    {unit}
+                                                </span>
+                                            </div>
                                         </div>
-                                    </div>
-
-                                    <div>
-                                        <label className="text-sm text-neutral-400">Altura (H)</label>
-                                        <div className="relative mt-1">
-                                            <input
-                                                type="number"
-                                                value={toDisplayValue(dimensions.height, unit)}
-                                                onChange={(e) =>
-                                                    setDimensions({ height: toMillimeters(Number(e.target.value), unit) })
-                                                }
-                                                className="w-full rounded-lg border border-neutral-800 bg-neutral-900 px-3 py-2 pr-10 text-white focus:border-violet-500 focus:outline-none"
-                                            />
-                                            <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-sm text-neutral-500">
-                                                {unit}
-                                            </span>
-                                        </div>
-                                    </div>
-
-                                    <div>
-                                        <label className="text-sm text-neutral-400">Profundidad (D)</label>
-                                        <div className="relative mt-1">
-                                            <input
-                                                type="number"
-                                                value={toDisplayValue(dimensions.depth, unit)}
-                                                onChange={(e) =>
-                                                    setDimensions({ depth: toMillimeters(Number(e.target.value), unit) })
-                                                }
-                                                className="w-full rounded-lg border border-neutral-800 bg-neutral-900 px-3 py-2 pr-10 text-white focus:border-violet-500 focus:outline-none"
-                                            />
-                                            <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-sm text-neutral-500">
-                                                {unit}
-                                            </span>
-                                        </div>
-                                    </div>
+                                    ))}
                                 </div>
                             </div>
 
@@ -177,33 +195,23 @@ function ConfigureFlightcase() {
                                 <h3 className="text-xs font-semibold uppercase tracking-wider text-neutral-500">
                                     Unidades de rack
                                 </h3>
-                                <div className="mt-4 flex flex-col gap-4">
-                                    <div>
-                                        <label className="text-sm text-neutral-400">Altura útil de rack</label>
-                                        <select
-                                            value={rackUnits}
-                                            onChange={(e) => setRackUnits(Number(e.target.value))}
-                                            className="mt-1 w-full rounded-lg border border-neutral-800 bg-neutral-900 px-3 py-2 text-white focus:border-violet-500 focus:outline-none"
-                                        >
-                                            <option value={12}>12U</option>
-                                            <option value={14}>14U</option>
-                                            <option value={16}>16U</option>
-                                            <option value={20}>20U</option>
-                                        </select>
-                                    </div>
-
-                                    <div>
-                                        <label className="text-sm text-neutral-400">Tipo de rack strip</label>
-                                        <select
-                                            value={rackStripType}
-                                            onChange={(e) => setRackStripType(e.target.value)}
-                                            className="mt-1 w-full rounded-lg border border-neutral-800 bg-neutral-900 px-3 py-2 text-white focus:border-violet-500 focus:outline-none"
-                                        >
-                                            <option value="cuadrada">Rack Strip (Cuadrada)</option>
-                                            <option value="redonda">Rack Strip (Redonda)</option>
-                                        </select>
-                                    </div>
-                                </div>
+                                <label
+                                    htmlFor="rack-units"
+                                    className="mt-3 block text-xs text-neutral-400 md:text-sm"
+                                >
+                                    Altura útil de rack
+                                </label>
+                                <select
+                                    id="rack-units"
+                                    value={rackUnits}
+                                    onChange={(e) => setRackUnits(Number(e.target.value))}
+                                    className="mt-1 w-full rounded-lg border border-neutral-800 bg-neutral-900 px-3 py-2 text-white focus:border-violet-500 focus:outline-none"
+                                >
+                                    <option value={12}>12U</option>
+                                    <option value={14}>14U</option>
+                                    <option value={16}>16U</option>
+                                    <option value={20}>20U</option>
+                                </select>
                             </div>
                         </div>
 
@@ -211,91 +219,76 @@ function ConfigureFlightcase() {
                             <h3 className="text-xs font-semibold uppercase tracking-wider text-neutral-500">
                                 Componentes y accesorios
                             </h3>
-                            <div className="mt-4 divide-y divide-neutral-800">
-                                <CounterField
-                                    icon={Circle}
-                                    label="Ball Corner"
-                                    value={components.ballCorner}
-                                    onChange={(value) => setComponentCount('ballCorner', value)}
-                                />
-                                <CounterField
-                                    icon={DoorClosed}
-                                    label="Lid Stay with Hinge"
-                                    value={components.lidStayWithHinge}
-                                    onChange={(value) => setComponentCount('lidStayWithHinge', value)}
-                                />
-                                <CounterField
-                                    icon={Rows3}
-                                    label={`Rack Strip (${rackUnits}U)`}
-                                    value={components.rackStrip}
-                                    onChange={(value) => setComponentCount('rackStrip', value)}
-                                />
-                                <CounterField
-                                    icon={Grip}
-                                    label="Asas de agarre"
-                                    value={components.handles}
-                                    onChange={(value) => setComponentCount('handles', value)}
-                                />
-                                <CounterField
-                                    icon={Lock}
-                                    label="Cierres mariposa"
-                                    value={components.butterflyLatches}
-                                    onChange={(value) => setComponentCount('butterflyLatches', value)}
-                                />
-                                <ToggleField
-                                    icon={CircleDot}
-                                    label="Ruedas"
-                                    checked={components.wheels}
-                                    onChange={(value) => setComponentFlag('wheels', value)}
-                                />
-                                <ToggleField
-                                    icon={Disc}
-                                    label="Patas de goma"
-                                    checked={components.rubberFeet}
-                                    onChange={(value) => setComponentFlag('rubberFeet', value)}
-                                />
-                                <ToggleField
-                                    icon={PanelBottom}
-                                    label="Bandeja deslizante"
-                                    checked={components.slidingTray}
-                                    onChange={(value) => setComponentFlag('slidingTray', value)}
-                                />
+                            <div className="mt-2 divide-y divide-neutral-800">
+                                {getAllFamilies().map((family) => {
+                                    const selected = components[family]
+                                    const [firstItem] = getFamilyItems(family)
+                                    const item = getCatalogItem(family, selected.color, rackUnits)
+                                    const label =
+                                        family === 'rack-rail'
+                                            ? `${getFamilyLabel(family)} (${rackUnits}U)`
+                                            : getFamilyLabel(family)
+
+                                    return (
+                                        <ComponentRow
+                                            key={family}
+                                            label={label}
+                                            photoUrl={item?.photoUrl}
+                                            quantity={selected.quantity}
+                                            min={firstItem.minPerFlightcase}
+                                            max={firstItem.maxPerFlightcase}
+                                            colors={getFamilyColors(family)}
+                                            color={selected.color}
+                                            onQuantityChange={(quantity) => setComponentQuantity(family, quantity)}
+                                            onColorChange={(color) => setComponentColor(family, color)}
+                                        />
+                                    )
+                                })}
                             </div>
                         </div>
                     </div>
                 </section>
 
-                <section className="flex flex-col gap-4">
-                    <h2 className="text-lg font-semibold uppercase tracking-wide text-white">
+                {/* Panel 3: vista previa 3D y resumen */}
+                <section
+                    className={`${activeTab === 'preview' ? 'flex' : 'hidden xl:flex'} min-h-0 flex-col gap-3`}
+                >
+                    <h2 className="hidden text-lg font-semibold uppercase tracking-wide text-white xl:block">
                         Vista previa 3D
                     </h2>
 
-                    <div className="flex min-h-320px flex-1 items-center justify-center overflow-hidden rounded-lg border border-neutral-800">
-                        <FlightcasePreview3D />
+                    <div className="relative min-h-0 flex-1 overflow-hidden rounded-lg border border-neutral-800">
+                        <div className="absolute inset-0">
+                            <FlightcasePreview3D />
+                        </div>
                     </div>
 
-                    <div className="rounded-lg border border-neutral-800 p-4">
+                    <div className="hidden rounded-lg border border-neutral-800 p-4 xl:block">
                         <h3 className="text-xs font-semibold uppercase tracking-wider text-neutral-500">
                             Resumen
                         </h3>
                         <dl className="mt-3 flex flex-col gap-2 text-sm">
-                            <div className="flex justify-between">
-                                <dt className="text-neutral-500">Unidades de rack</dt>
-                                <dd className="text-white">{rackUnits}U</dd>
-                            </div>
-                            <div className="flex justify-between">
-                                <dt className="text-neutral-500">Dimensiones (W x H x D)</dt>
-                                <dd className="text-white">
-                                    {dimensions.width} x {dimensions.height} x {dimensions.depth} mm
-                                </dd>
-                            </div>
-                            <div className="flex justify-between">
-                                <dt className="text-neutral-500">Peso aprox.</dt>
-                                <dd className="text-white">{estimatedWeight.toFixed(1)} kg</dd>
-                            </div>
+                            {summaryItems.map((item) => (
+                                <div key={item.label} className="flex justify-between gap-3">
+                                    <dt className="text-neutral-500">{item.label}</dt>
+                                    <dd className="text-white">{item.value}</dd>
+                                </div>
+                            ))}
                         </dl>
                     </div>
                 </section>
+            </div>
+
+            {/* Resumen fijo para tablet y móvil */}
+            <div className="shrink-0 border-t border-neutral-800 px-4 py-2 xl:hidden">
+                <dl className="flex items-start justify-between gap-3 text-xs">
+                    {summaryItems.map((item) => (
+                        <div key={item.label}>
+                            <dt className="text-neutral-500">{item.shortLabel}</dt>
+                            <dd className="text-white">{item.value}</dd>
+                        </div>
+                    ))}
+                </dl>
             </div>
         </div>
     )

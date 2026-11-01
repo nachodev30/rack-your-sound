@@ -1,39 +1,39 @@
-import type { FlightcaseComponents, FlightcaseDimensions } from "../types/flightcase";
+import type { ComponentsSelection } from '../types/component'
+import type { FlightcaseDimensions } from '../types/flightcase'
+import { getCatalogItem } from './catalog'
 
-const PANEL_DENSITY_KG_PER_M2 = 10.2
+const PANEL_DENSITY_KG_PER_M2 = 10.7
 
-const COMPONENT_UNIT_WEIGHTS = {
-    ballCorner: 0.15,
-    lidStayWithHinge: 0.3,
-    rackStrip: 0.4,
-    handles: 0.25,
-    butterflyLatches: 0.2,
-}
-
-const WHEELS_WEIGHT = 1.6
-const RUBBER_FEET_WEIGHT = 0.2
-const SLIDING_TRAY_WEIGHT = 1.5
-
-export function calculateFlightcaseWeight(
-    dimensions: FlightcaseDimensions,
-    components: FlightcaseComponents,
-) {
+// Estimado: el catálogo no incluye datos de los paneles de la carcasa.
+export function calculateShellWeightKg(dimensions: FlightcaseDimensions) {
     const widthM = dimensions.width / 1000
     const heightM = dimensions.height / 1000
     const depthM = dimensions.depth / 1000
 
     const surfaceAreaM2 = 2 * (widthM * heightM + widthM * depthM + heightM * depthM)
-    const shellWeight = surfaceAreaM2 * PANEL_DENSITY_KG_PER_M2
+    return surfaceAreaM2 * PANEL_DENSITY_KG_PER_M2
+}
 
-    const componentsWeight =
-        components.ballCorner * COMPONENT_UNIT_WEIGHTS.ballCorner +
-        components.lidStayWithHinge * COMPONENT_UNIT_WEIGHTS.lidStayWithHinge +
-        components.rackStrip * COMPONENT_UNIT_WEIGHTS.rackStrip +
-        components.handles * COMPONENT_UNIT_WEIGHTS.handles +
-        components.butterflyLatches * COMPONENT_UNIT_WEIGHTS.butterflyLatches +
-        (components.wheels ? WHEELS_WEIGHT : 0) +
-        (components.rubberFeet ? RUBBER_FEET_WEIGHT : 0) +
-        (components.slidingTray ? SLIDING_TRAY_WEIGHT : 0)
+// Exacto: peso real del catálogo × cantidad de cada familia incluida.
+export function calculateHardwareWeightKg(components: ComponentsSelection, rackUnits: number) {
+    let totalGrams = 0
 
-    return shellWeight + componentsWeight
+    for (const [family, selected] of Object.entries(components)) {
+        if (selected.quantity <= 0) continue
+
+        const item = getCatalogItem(family, selected.color, rackUnits)
+        if (!item) continue
+
+        totalGrams += item.weightGrams * selected.quantity
+    }
+
+    return totalGrams / 1000
+}
+
+export function calculateFlightcaseWeight(
+    dimensions: FlightcaseDimensions,
+    components: ComponentsSelection,
+    rackUnits: number,
+) {
+    return calculateShellWeightKg(dimensions) + calculateHardwareWeightKg(components, rackUnits)
 }

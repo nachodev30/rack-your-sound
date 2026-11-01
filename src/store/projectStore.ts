@@ -1,40 +1,34 @@
-import { create } from "zustand"
-import type { ProjectType } from "../types/project"
-import type {
-    FlightcaseSize,
-    FlightcaseDimensions,
-    FlightcaseComponents,
-} from "../types/flightcase"
+import { create } from 'zustand'
+import type { ComponentColor, ComponentsSelection } from '../types/component'
+import type { FlightcaseDimensions, FlightcaseSize } from '../types/flightcase'
+import type { ProjectType } from '../types/project'
+import { getAllFamilies, getFamilyColors, getFamilyItems } from '../utils/catalog'
 
-type ComponentCountKey =
-    | 'ballCorner'
-    | 'lidStayWithHinge'
-    | 'rackStrip'
-    | 'handles'
-    | 'butterflyLatches'
+// Familias que vienen incluidas (a su cantidad mínima) al elegir un tamaño estándar.
+const DEFAULT_INCLUDED_FAMILIES = [
+    'ball-corner',
+    'side-handle',
+    'butterfly-latch',
+    'lid-stay',
+    'hinge',
+    'rack-rail',
+    'wheel',
+]
 
-type ComponentFlagKey = 'wheels' | 'rubberFeet' | 'slidingTray'
+function buildComponents(includedFamilies: string[]): ComponentsSelection {
+    const selection: ComponentsSelection = {}
 
-const DEFAULT_COMPONENTS: FlightcaseComponents = {
-    ballCorner: 0,
-    lidStayWithHinge: 0,
-    rackStrip: 0,
-    handles: 0,
-    butterflyLatches: 0,
-    wheels: false,
-    rubberFeet: false,
-    slidingTray: false,
-}
+    for (const family of getAllFamilies()) {
+        const [firstItem] = getFamilyItems(family)
+        const colors = getFamilyColors(family)
 
-const EMPTY_COMPONENTS: FlightcaseComponents = {
-    ballCorner: 0,
-    lidStayWithHinge: 0,
-    rackStrip: 0,
-    handles: 0,
-    butterflyLatches: 0,
-    wheels: false,
-    rubberFeet: false,
-    slidingTray: false,
+        selection[family] = {
+            quantity: includedFamilies.includes(family) ? firstItem.minPerFlightcase : 0,
+            color: colors.length > 0 ? colors[0] : null,
+        }
+    }
+
+    return selection
 }
 
 interface ProjectState {
@@ -43,16 +37,14 @@ interface ProjectState {
     flightcaseSizeId: string | null
     dimensions: FlightcaseDimensions
     rackUnits: number
-    rackStripType: string
-    components: FlightcaseComponents
+    components: ComponentsSelection
     setBasicInfo: (info: { name: string; type: ProjectType }) => void
     selectStandardSize: (size: FlightcaseSize) => void
     selectCustomSize: () => void
     setDimensions: (dimensions: Partial<FlightcaseDimensions>) => void
     setRackUnits: (units: number) => void
-    setRackStripType: (type: string) => void
-    setComponentCount: (key: ComponentCountKey, value: number) => void
-    setComponentFlag: (key: ComponentFlagKey, value: boolean) => void
+    setComponentQuantity: (family: string, quantity: number) => void
+    setComponentColor: (family: string, color: ComponentColor) => void
 }
 
 export const useProjectStore = create<ProjectState>((set) => ({
@@ -61,8 +53,7 @@ export const useProjectStore = create<ProjectState>((set) => ({
     flightcaseSizeId: null,
     dimensions: { width: 0, height: 0, depth: 0 },
     rackUnits: 12,
-    rackStripType: 'cuadrada',
-    components: { ...DEFAULT_COMPONENTS },
+    components: buildComponents(DEFAULT_INCLUDED_FAMILIES),
 
     setBasicInfo: (info) => set(info),
 
@@ -71,8 +62,7 @@ export const useProjectStore = create<ProjectState>((set) => ({
             flightcaseSizeId: size.id,
             dimensions: { width: size.width, height: size.height, depth: size.depth },
             rackUnits: size.units,
-            rackStripType: 'cuadrada',
-            components: { ...DEFAULT_COMPONENTS },
+            components: buildComponents(DEFAULT_INCLUDED_FAMILIES),
         }),
 
     selectCustomSize: () =>
@@ -80,8 +70,7 @@ export const useProjectStore = create<ProjectState>((set) => ({
             flightcaseSizeId: 'custom',
             dimensions: { width: 0, height: 0, depth: 0 },
             rackUnits: 12,
-            rackStripType: 'cuadrada',
-            components: { ...EMPTY_COMPONENTS },
+            components: buildComponents([]),
         }),
 
     setDimensions: (dimensions) =>
@@ -89,13 +78,30 @@ export const useProjectStore = create<ProjectState>((set) => ({
 
     setRackUnits: (units) => set({ rackUnits: units }),
 
-    setRackStripType: (type) => set({ rackStripType: type }),
+    setComponentQuantity: (family, quantity) =>
+        set((state) => {
+            const [firstItem] = getFamilyItems(family)
+            if (!firstItem) return {}
 
-    setComponentCount: (key, value) =>
+            // 0 = no incluido; si se incluye, siempre entre el mínimo y el máximo.
+            const clamped =
+                quantity <= 0
+                    ? 0
+                    : Math.min(Math.max(quantity, firstItem.minPerFlightcase), firstItem.maxPerFlightcase)
+
+            return {
+                components: {
+                    ...state.components,
+                    [family]: { ...state.components[family], quantity: clamped },
+                },
+            }
+        }),
+
+    setComponentColor: (family, color) =>
         set((state) => ({
-            components: { ...state.components, [key]: Math.max(0, value) },
+            components: {
+                ...state.components,
+                [family]: { ...state.components[family], color },
+            },
         })),
-
-    setComponentFlag: (key, value) =>
-        set((state) => ({ components: { ...state.components, [key]: value } })),
 }))
